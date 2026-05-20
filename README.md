@@ -22,16 +22,10 @@ You can find more [info about `jq` on the official website](https://github.com/s
 
 ## Installing Custom Metrics Api
 
-Make sure you are in the `monitoring` folder:
-
-```bash
-cd monitoring
-```
-
 Deploy the Metrics Server in the `kube-system` namespace:
 
 ```bash
-kubectl create -f ./metrics-server
+kubectl create -f monitoring/metrics-server
 ```
 
 After one minute the metric-server starts reporting CPU and memory usage for nodes and pods.
@@ -51,31 +45,25 @@ kubectl get --raw "/apis/metrics.k8s.io/v1beta1/pods" | jq .
 Create the monitoring namespace:
 
 ```bash
-kubectl create -f ./namespaces.yaml
+kubectl create -f monitoring/namespaces.yaml
 ```
 
 Deploy Prometheus v2 in the monitoring namespace:
 
 ```bash
-kubectl create -f ./prometheus
+kubectl create -f monitoring/prometheus
 ```
 
 Deploy the Prometheus custom metrics API adapter:
 
 ```bash
-kubectl create -f ./custom-metrics-api
+kubectl create -f monitoring/custom-metrics-api
 ```
 
 List the custom metrics provided by Prometheus:
 
 ```bash
 kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1" | jq .
-```
-
-Get the FS usage for all the pods in the `monitoring` namespace:
-
-```bash
-kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/monitoring/pods/*/fs_usage_bytes" | jq .
 ```
 
 ## Package the application
@@ -92,14 +80,16 @@ docker build -t spring-boot-hpa .
 Deploy the application in Kubernetes with:
 
 ```bash
-kubectl create -f kube/deployment.yaml
+kubectl create -f kube/deployment
 ```
 
-You can visit the application at http://<minkube ip>:32000
+You can visit the application at http://minkube_ip:32000
 
-You can send messages to the queue by visiting http://<minkube ip>:32000/submit
+> (Find the minikube ip address via `minikube ip`)
 
-You should be able to see the number of pending messages from http://<minkube ip>:32000/metrics and from the custom metrics endpoint:
+You can post messages to the queue by via http://minkube_ip:32000/submit?quantity=2
+
+You should be able to see the number of pending messages from http://minkube_ip:32000/metrics and from the custom metrics endpoint:
 
 ```bash
 kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/default/pods/*/messages" | jq .
@@ -116,10 +106,10 @@ kubectl create -f kube/hpa.yaml
 You can send more traffic to the application with:
 
 ```bash
-while true; do sleep 0.5; curl -s http://<minikube ip>:32000/submit; done
+while true; do curl -d "quantity=1" -X POST http://minkube_ip:32000/submit ; sleep 4; done
 ```
 
-When the application can't cope with the number of icoming messages, the autoscaler increases the number of pods only every 3 minutes.
+When the application can't cope with the number of incoming messages, the autoscaler increases the number of pods in 3 minute intervals.
 
 You may need to wait three minutes before you can see more pods joining the deployment with:
 
@@ -135,20 +125,17 @@ You can inspect the event and triggers in the HPA with:
 kubectl get hpa spring-boot-hpa
 ```
 
-## Appendix
+## Notes
 
-Using the secrets checked in the repository to deploy the Prometheus adapter is not recommended.
+The configuration for metrics and metrics server is configured to run on minikube only.
 
-You should generate your own secrets.
+**You won't be able to run the same YAML files for metrics and custom metrics server on your cluster or EKS, GKE, AKS, etc.**
 
-But before you do so, make sure you install `cfssl` - a command line tool and an HTTP API server for signing, verifying, and bundling TLS certificates
-                      
-You can find more [info about `cfssl` on the official website](https://github.com/cloudflare/cfssl).
+Also, there are secrets checked in the repository to deploy the Prometheus adapter.
 
-Once `cfssl` is installed you generate a new Kubernetes secret with:
+**In production, you should generate your own secrets and (possibly) not check them into version control.**
 
-```bash
-make certs
-```
+If you wish to run metrics and custom metrics server in production, you should check out the following resources:
 
-You should redeploy the Prometheus adapter.
+- [Metrics server](https://github.com/kubernetes-sigs/metrics-server)
+- [How to install Prometheus and the Promtheus Adapter](https://github.com/DirectXMan12/k8s-prometheus-adapter/blob/master/docs/walkthrough.md)
